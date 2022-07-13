@@ -1,6 +1,9 @@
 import asyncio
-from tcputils import *
-
+# try:
+#     from tcputils import *
+# except ImportError:
+    # from grader.tcputils import *
+from grader.tcputils import *
 
 class Servidor:
     def __init__(self, rede, porta):
@@ -28,7 +31,7 @@ class Servidor:
             print('descartando segmento com checksum incorreto')
             return
 
-        payload = segment[4*(flags>>12):]
+        payload = segment[4*(flags >> 12):]
         id_conexao = (src_addr, src_port, dst_addr, dst_port)
 
         if (flags & FLAGS_SYN) == FLAGS_SYN:
@@ -37,6 +40,15 @@ class Servidor:
             conexao = self.conexoes[id_conexao] = Conexao(self, id_conexao)
             # TODO: você precisa fazer o handshake aceitando a conexão. Escolha se você acha melhor
             # fazer aqui mesmo ou dentro da classe Conexao.
+
+            conexao.enviar(
+                make_header(src_port=dst_port, 
+                            dst_port=src_port,
+                            seq_no=0, # TODO
+                            ack_no=0, # TODO
+                            flags=0 # TODO
+            ))
+
             if self.callback:
                 self.callback(conexao)
         elif id_conexao in self.conexoes:
@@ -52,8 +64,9 @@ class Conexao:
         self.servidor = servidor
         self.id_conexao = id_conexao
         self.callback = None
-        self.timer = asyncio.get_event_loop().call_later(1, self._exemplo_timer)  # um timer pode ser criado assim; esta linha é só um exemplo e pode ser removida
-        #self.timer.cancel()   # é possível cancelar o timer chamando esse método; esta linha é só um exemplo e pode ser removida
+        # um timer pode ser criado assim; esta linha é só um exemplo e pode ser removida
+        self.timer = asyncio.get_event_loop().call_later(1, self._exemplo_timer)
+        # self.timer.cancel()   # é possível cancelar o timer chamando esse método; esta linha é só um exemplo e pode ser removida
 
     def _exemplo_timer(self):
         # Esta função é só um exemplo e pode ser removida
@@ -81,7 +94,10 @@ class Conexao:
         # TODO: implemente aqui o envio de dados.
         # Chame self.servidor.rede.enviar(segmento, dest_addr) para enviar o segmento
         # que você construir para a camada de rede.
-        pass
+        if type(dados) == bytes:
+            self.servidor.rede.enviar(dados, self.id_conexao[2])
+        else:
+            # TODO: criar segmento!
 
     def fechar(self):
         """
