@@ -1,9 +1,10 @@
 import asyncio
-# try:
-#     from tcputils import *
-# except ImportError:
-    # from grader.tcputils import *
-from grader.tcputils import *
+try:
+    from tcputils import *
+except ImportError:
+    from grader.tcputils import *
+# from grader.tcputils import *
+from random import randint
 
 class Servidor:
     def __init__(self, rede, porta):
@@ -21,6 +22,9 @@ class Servidor:
         self.callback = callback
 
     def _rdt_rcv(self, src_addr, dst_addr, segment):
+        print(f"{src_addr = }")
+        print(f"{dst_addr = }")
+        print(f"{segment = }")
         src_port, dst_port, seq_no, ack_no, \
             flags, window_size, checksum, urg_ptr = read_header(segment)
 
@@ -41,13 +45,24 @@ class Servidor:
             # TODO: você precisa fazer o handshake aceitando a conexão. Escolha se você acha melhor
             # fazer aqui mesmo ou dentro da classe Conexao.
 
-            conexao.enviar(
-                make_header(src_port=dst_port, 
-                            dst_port=src_port,
-                            seq_no=0, # TODO
-                            ack_no=0, # TODO
-                            flags=0 # TODO
-            ))
+            conexao.seq_no = randint(0, 65535)
+            conexao.ack_no = seq_no + 1
+
+            self.rede.enviar(
+                fix_checksum(
+                    make_header(
+                        src_port=dst_port, dst_port=src_port,
+                        seq_no=conexao.seq_no, ack_no=conexao.ack_no,
+                        flags=((flags & 0) | FLAGS_ACK | FLAGS_SYN)
+                    ),
+                    src_addr = dst_addr, 
+                    dst_addr = src_addr
+                ),
+                src_addr
+            )
+
+            conexao.seq_no += 1
+            conexao.seq_no_base = conexao.seq_no
 
             if self.callback:
                 self.callback(conexao)
@@ -63,6 +78,9 @@ class Conexao:
     def __init__(self, servidor, id_conexao):
         self.servidor = servidor
         self.id_conexao = id_conexao
+        self.seq_no = None
+        self.seq_no_base = None
+        self.ack_no = None
         self.callback = None
         # um timer pode ser criado assim; esta linha é só um exemplo e pode ser removida
         self.timer = asyncio.get_event_loop().call_later(1, self._exemplo_timer)
@@ -98,6 +116,7 @@ class Conexao:
             self.servidor.rede.enviar(dados, self.id_conexao[2])
         else:
             # TODO: criar segmento!
+            pass
 
     def fechar(self):
         """
