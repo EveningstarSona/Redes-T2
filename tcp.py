@@ -70,7 +70,7 @@ class Servidor:
             # Passa para a conexão adequada se ela já estiver estabelecida
             self.conexoes[id_conexao]._rdt_rcv(seq_no, ack_no, flags, payload)
         else:
-            print('%s:%d -> %s:%d (pacote associado a conexão desconhecida)' %
+            print('%s:%d -> %s:%d (pacote associado a conexão desconhecida)' % 
                   (src_addr, src_port, dst_addr, dst_port))
 
 
