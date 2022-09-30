@@ -53,7 +53,7 @@ class Servidor:
                         seq_no=conexao.seq_no, ack_no=conexao.ack_no,
                         flags=((flags & 0) | FLAGS_ACK | FLAGS_SYN)
                     ),
-                    src_addr = dst_addr, 
+                    src_addr = dst_addr,
                     dst_addr = src_addr
                 ),
                 src_addr
@@ -80,6 +80,7 @@ class Conexao:
         self.ack_no = None
         self.callback = None
         self.timer = None
+        self.fechada = False
         self.seq_no_base = None
         self.pacotes_sem_ack = []
         self.timeoutInterval = 1
@@ -120,17 +121,14 @@ class Conexao:
     def _rdt_rcv(self, seq_no, ack_no, flags, payload):
         print('recebido payload: %r' % payload)
 
-        if (flags & FLAGS_FIN == FLAGS_FIN):
-            self.callback(self, b'')
-            self.my_len_seq_no = ack_no
-
-            src_addr, src_port, dst_addr, dst_port = self.id_conexao
-            segment = make_header(dst_port, src_port, self.seq_enviar, self.expected_seq_no + 1, flags)
 
 	# Passo 2
 
         # Se der flag ACK, precisa encerrar o timer e remover da lista de pacotes que precisam ser confirmados
-        if (flags & FLAGS_ACK) == FLAGS_ACK and ack_no > self.seq_no_base:
+        if (flags & FLAGS_ACK) == FLAGS_ACK and self.fechada:
+            self.servidor.conexoes.pop(self.id_conexao)
+            return
+        elif (flags & FLAGS_ACK) == FLAGS_ACK and ack_no > self.seq_no_base and not self.fechada:
             self.seq_no_base = ack_no
             if self.pacotes_sem_ack:
                 self._atualizar_timeout_interval()
@@ -140,9 +138,17 @@ class Conexao:
                 if self.pacotes_sem_ack:
                     self.timer = asyncio.get_event_loop().call_later(self.timeoutInterval, self._timer)
 
-        if (flags & FLAGS_FIN) == FLAGS_FIN:
+        if (flags & FLAGS_FIN) == FLAGS_FIN and not self.fechada:
+            self.fechada = True
             payload = b''
+            self.callback(self, payload)
             self.ack_no += 1
+            dst_addr, dst_port, src_addr, src_port = self.id_conexao
+            segmento = make_header(src_port, dst_port, self.seq_no_base, self.ack_no, FLAGS_ACK)
+            segmento_checksum_corrigido = fix_checksum(segmento, src_addr, dst_addr)
+
+            self.servidor.rede.enviar(segmento_checksum_corrigido, dst_addr)
+            return
         elif len(payload) <= 0:
             return
 
@@ -198,8 +204,7 @@ class Conexao:
         """
         Usado pela camada de aplicação para fechar a conexão
         """
-        self.seq_enviar = self.my_len_seq_no
-        src_addr, src_port, dst_addr, dst_port = self.id_conexao   
-        segment = make_header(dst_port, src_port, self.seq_enviar, self.expected_seq_no + 1, FLAGS_FIN)
-        response = fix_checksum(segment, dst_addr, src_addr)
-        self.servidor.rede.enviar(response, src_addr)
+
+        dst_addr, dst_port, src_addr, src_port = self.id_conexao
+        segmento = make_header(src_port, dst_port, self.seq_no, self.ack_no, FLAGS_FIN)
+        self.servidor.rede.enviar(fix_checksum(segmento, src_addr, dst_addr), dst_addr)
